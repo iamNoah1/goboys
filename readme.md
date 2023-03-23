@@ -46,3 +46,18 @@ Homework for application process at Cast AI
     * Each cowboy runs on a different port that gets stored together with other properties of the cowboy in a file
     * Changes on the cowboy code needs to be followed by `go build` in the cowboy directory
 * Solution is on branch `first`
+
+### Run the application
+* Optionally set `GIN_MODE` to `test` in order to not have that many logs of the webserver framework
+* Optionally set `PORT` to change the port, the application runs at
+* Optionally set `LOG_LEVEL` to `prod` which only shows info and above 
+* `go run main.go`
+* use endppoint to save cowboys
+* use endpoint to start battle
+
+### Referee API 
+* POST <host>:<port>/cowboy - saves the cowboys from body json 
+* GET <host>:<port>/cowboy - gets list of cowboys with their properties
+* DELETE <host>:<port>/cowboy/<name> - deletes a cowboy
+* PUT <host>:<port>/cowboy/<name> - updates a cowboy
+* POST <host>:<port>/startShooting - starts the battle. Takes the list of cowboys as request body. 
