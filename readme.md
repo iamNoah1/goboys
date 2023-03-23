@@ -37,8 +37,9 @@ Homework for application process at Cast AI
         * Cowboys need to be single applications as they need to have APIs 
         * Orchestrator knows the health state, let's ask him
     * Orchestrator is actually the wrong name, it is more a referee
-* While Coding 
-    * While http and file store might be the simplest approach, I was thinking of 
+    * Not the referee should recognize when the battle is over, but the last standing cowboy
+* Insights While Coding 
+    * While http and file store might be the simplest approach, I was thinking of maybe when we use messaging, we don't to ask the referee who is still there to battle. Instead we can just shoot, and the first cowboy who reads the message, is the one that got shot. I mean it does not reflect how it works in reality, but it solves the problem. One cowboy shoots another one, randomly. 
 * Concept
     * We have two components, referee and cowboy, where at we have 1 referee and several cowboys
     * Both reside in different folders 
