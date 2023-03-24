@@ -47,3 +47,22 @@ Homework for application process at Cast AI
     * Each cowboy runs on a different port that gets stored together with other properties of the cowboy in a file
     * Changes on the cowboy code needs to be followed by `go build` in the cowboy directory
 * Solution is on branch `first`
+
+
+### Second approach
+* We stick with the referee and cowboys separation in separate projects/modules
+* Referee, 
+    * Keeps the state of cowboys, but this time we use psql
+    * Starts the battle 
+* Cowboys 
+    * just shoot a message in a message queue, and a random cowboy picks it up. 
+    * If a message does not get acknowledged anymore, the sending cowboy knows, that he is the only one left.
+    * Health updates including death are sent as message 
+* Review before coding
+    *  
+* Concept
+    * We have two components, referee and cowboy, where at we have 1 referee and several cowboys
+    * Both reside in different folders 
+    * The referee takes a list of cowboys stores them in a psql database, then spins several cowboys by running child processes start the cowboy binary
+    * Changes on the cowboy code needs to be followed by `go build` in the cowboy directory
+* Solution is on branch `second`
