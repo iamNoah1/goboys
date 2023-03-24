@@ -68,12 +68,12 @@ func spawn() {
 }
 
 func startBattle() {
-	logger.Infof("%s here, I am ready to fight.", me.Name)
-	logger.Infof("%s here, selecting target", me.Name)
+	logger.Infof("[%s]: I am ready to fight.", me.Name)
+	logger.Infof("[%s]: selecting target", me.Name)
 
 	for me.Health > 0 {
 		target := getTarget()
-		logger.Infof("%s here, selected %s as target. Going to shoot now ...", me.Name, target.Name)
+		logger.Infof("[%s]: selected %s as target. Going to shoot now ...", me.Name, target.Name)
 
 		query := make(map[string]string)
 		query["damage"] = strconv.Itoa(me.Damage)
@@ -81,10 +81,10 @@ func startBattle() {
 
 		//We don't consider the cowboy not being reachable anymore as an error, because then he is just dead
 		if err != nil && !strings.Contains(err.Error(), "EOF") && !strings.Contains(err.Error(), "connection refused") {
-			errMessage := fmt.Sprintf("%s here, errored when trying to shoot: ", me.Name)
+			errMessage := fmt.Sprintf("[%s]: errored when trying to shoot: ", me.Name)
 			logger.Errorln(errMessage, err)
 		}
-		logger.Infof("%s here, need to reload ...", me.Name)
+		logger.Infof("[%s]: need to reload ...", me.Name)
 		time.Sleep(1 * time.Second)
 	}
 }
@@ -92,20 +92,26 @@ func startBattle() {
 func getTarget() common.Cowboy {
 	body, err := common.MakeHttpRequest(http.MethodGet, orchestratorURI+"/cowboy", nil, nil, nil)
 	if err != nil {
-		//TODO aussteigen?
-		logger.Errorln(err)
+		var errorMessage = fmt.Sprintf("error while trying to get list of targets. Error: %s", err.Error())
+		logger.Errorln(errorMessage)
 	}
 
 	var cowboys []common.Cowboy
 	json.Unmarshal([]byte(body), &cowboys)
+	if err != nil {
+		var errorMessage = fmt.Sprintf("error while trying to unmarshall list of targets. Error: %s", err.Error())
+		logger.Debug(errorMessage)
+	}
 
 	cowboys = removeMySelf(cowboys, me)
 	if len(cowboys) == 0 {
-		logger.Infof("%s here, no one left, I am the winner", me.Name)
+		logger.Infof("[%s]: no one left, I am the winner", me.Name)
 		os.Exit(0)
 	}
 
+	rand.Seed(time.Now().UnixNano())
 	randomIndex := rand.Intn(len(cowboys))
+
 	return cowboys[randomIndex]
 }
 
@@ -127,22 +133,23 @@ func takeShot(c *gin.Context) {
 
 	damage, err := strconv.Atoi(damageString)
 	if err != nil {
-		logger.Fatal(err)
+		var errMessage = fmt.Sprintf("[%s]: Error while taking a shot. Error: %s", me.Name, err.Error())
+		logger.Error(errMessage)
+		c.String(http.StatusInternalServerError, errMessage)
 	}
-
-	logger.Debugf("damage: %d", damage)
 
 	me.Health = me.Health - damage
 	if me.Health <= 0 {
 		_, err := common.MakeHttpRequest(http.MethodDelete, orchestratorURI+"/cowboy/"+me.Name, nil, nil, nil)
 		if err != nil {
-			logger.Error(err)
-			c.Status(http.StatusInternalServerError)
+			var errMessage = fmt.Sprintf("[%s]: Error while taking a shot. Error: %s", me.Name, err.Error())
+			logger.Error(errMessage)
+			c.String(http.StatusInternalServerError, errMessage)
 		}
-		logger.Infof("%s here, I think I just died", me.Name)
+		logger.Infof("[%s]: I think, I just died", me.Name)
 		os.Exit(0)
 	} else {
-		logger.Infof("%s here, got shot with damage of %d. Only %d health left", me.Name, damage, me.Health)
+		logger.Infof("[%s]: got shot with damage of %d. Only %d health left", me.Name, damage, me.Health)
 
 		bodyMessage := fmt.Sprintf(`{"Health": %d}`, me.Health)
 		jsonBody := []byte(bodyMessage)
@@ -152,8 +159,9 @@ func takeShot(c *gin.Context) {
 		headers["Content-Type"] = "application/json"
 		_, err := common.MakeHttpRequest(http.MethodPut, orchestratorURI+"/cowboy/"+me.Name, bodyReader, nil, headers)
 		if err != nil {
-			logger.Error(err)
-			c.Status(http.StatusInternalServerError)
+			var errMessage = fmt.Sprintf("[%s]: Error while taking a shot. Error: %s", me.Name, err.Error())
+			logger.Error(errMessage)
+			c.String(http.StatusInternalServerError, errMessage)
 		}
 	}
 

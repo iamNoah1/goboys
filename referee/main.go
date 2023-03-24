@@ -55,13 +55,13 @@ func saveCowboys(c *gin.Context) {
 	err := WriteCowboys(cowboys)
 
 	if nil != err {
-		//TODO error message
-		logger.Fatal(err)
+		var errMessage = fmt.Sprintf("[Referee]: could not save cowboys, try again. Error: %s", err.Error())
+		logger.Error(errMessage)
+		c.String(http.StatusInternalServerError, errMessage)
 	} else {
 		logger.Info("[Referee]: saved cowboys, ready to start the show off")
+		c.Status(http.StatusCreated)
 	}
-
-	c.Status(http.StatusCreated)
 }
 
 func deleteCowboy(c *gin.Context) {
@@ -71,7 +71,9 @@ func deleteCowboy(c *gin.Context) {
 
 	cowboys, err := ReadCowboys()
 	if nil != err {
-		logger.Fatal(err)
+		var errMessage = fmt.Sprintf("[Referee]: could not read cowboys for deletion. Error: %s", err.Error())
+		logger.Error(errMessage)
+		c.String(http.StatusInternalServerError, errMessage)
 	}
 
 	for i, cowboy := range cowboys {
@@ -83,12 +85,13 @@ func deleteCowboy(c *gin.Context) {
 	err = WriteCowboys(cowboys)
 
 	if nil != err {
-		logger.Fatal(err)
+		var errMessage = fmt.Sprintf("[Referee]: could not save cowboys. Error: %s", err.Error())
+		logger.Error(errMessage)
+		c.String(http.StatusInternalServerError, errMessage)
 	} else {
 		logger.Info("[Referee]: updated cowboys")
+		c.Status(http.StatusOK)
 	}
-
-	c.Status(http.StatusOK)
 }
 
 func remove(s []common.Cowboy, i int) []common.Cowboy {
@@ -103,7 +106,9 @@ func updateCowboy(c *gin.Context) {
 
 	cowboys, err := ReadCowboys()
 	if nil != err {
-		logger.Fatal(err)
+		var errMessage = fmt.Sprintf("[Referee]: could not read cowboys for update. Error: %s", err.Error())
+		logger.Error(errMessage)
+		c.String(http.StatusInternalServerError, errMessage)
 	}
 
 	for i, cowboy := range cowboys {
@@ -119,12 +124,13 @@ func updateCowboy(c *gin.Context) {
 	err = WriteCowboys(cowboys)
 
 	if nil != err {
-		logger.Fatal(err)
+		var errMessage = fmt.Sprintf("[Referee]: could not save cowboys. Error: %s", err.Error())
+		logger.Error(errMessage)
+		c.String(http.StatusInternalServerError, errMessage)
 	} else {
 		logger.Info("[Referee]: updated cowboy")
+		c.Status(http.StatusOK)
 	}
-
-	c.Status(http.StatusOK)
 }
 
 func getCowboys(c *gin.Context) {
@@ -132,43 +138,48 @@ func getCowboys(c *gin.Context) {
 
 	cowboys, err := ReadCowboys()
 	if nil != err {
-		logger.Fatal(err)
+		var errMessage = fmt.Sprintf("[Referee]: could not read cowboys. Error: %s", err.Error())
+		logger.Error(errMessage)
+		c.String(http.StatusInternalServerError, errMessage)
 	}
 
 	c.JSON(http.StatusOK, cowboys)
 }
 
 func startShooting(c *gin.Context) {
+	logger.Debugln("[Referee]: entered POST /startShooting endoint")
+
 	cowboys, err := ReadCowboys()
 	if nil != err {
-		log.Fatalf("[Referee]: Could not read cowboy db file. Error: %s", err)
+		var errMessage = fmt.Sprintf("[Referee]: could not read cowboys. Error: %s", err.Error())
+		logger.Error(errMessage)
+		c.String(http.StatusInternalServerError, errMessage)
 	}
 
 	for _, cowboy := range cowboys {
-		split := strings.Split(cowboy.URI, ":")
-		portEnv := fmt.Sprintf("PORT=%s", split[2])
-
-		cmd := exec.Command("../cowboy/cowboy", cowboy.Name, strconv.Itoa(cowboy.Health), strconv.Itoa(cowboy.Damage))
-		cmd.Env = os.Environ()
-		cmd.Env = append(cmd.Env, portEnv)
-		cmd.Env = append(cmd.Env, "ORCH_URI=http://localhost:8080")
-		cmd.Env = append(cmd.Env, "GIN_MODE="+os.Getenv("GIN_MODE"))
-		cmd.Env = append(cmd.Env, "LOG_LEVEL="+os.Getenv("LOG_LEVEL"))
-
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-
-		if err := cmd.Start(); err != nil {
-			log.Fatal("[Referee]: could not spawn cowboy: ", err)
-		}
-		defer cmd.Wait()
+		go spawnCowboy(cowboy)
 	}
-	//TODO no idea why this does not get back before all childs are finished
 	c.String(http.StatusCreated, "shooting started")
 }
 
 func spawnCowboy(cowboy common.Cowboy) {
+	split := strings.Split(cowboy.URI, ":")
+	portEnv := fmt.Sprintf("PORT=%s", split[2])
 
+	cmd := exec.Command("../cowboy/cowboy", cowboy.Name, strconv.Itoa(cowboy.Health), strconv.Itoa(cowboy.Damage))
+	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, portEnv)
+	cmd.Env = append(cmd.Env, "ORCH_URI=http://localhost:8080")
+	cmd.Env = append(cmd.Env, "GIN_MODE="+os.Getenv("GIN_MODE"))
+	cmd.Env = append(cmd.Env, "LOG_LEVEL="+os.Getenv("LOG_LEVEL"))
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); err != nil {
+		log.Fatal("[Referee]: could not spawn cowboy: ", err)
+	}
+	defer cmd.Wait()
 }
 
 func WriteCowboys(cowboys []common.Cowboy) error {
@@ -177,7 +188,7 @@ func WriteCowboys(cowboys []common.Cowboy) error {
 
 	_, err := os.Create("./cowboy-db") // do we need that?
 	if nil != err {
-		log.Fatalf("[Referee]: Could not create cowboy db file. Error: %s", err)
+		return err
 	}
 
 	content, _ := json.Marshal(cowboys)
