@@ -12,22 +12,17 @@ import (
 	"strings"
 	"sync"
 
+	"common"
+
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
-
-type Cowboy struct {
-	Name   string `json:"name"`
-	Health int    `json:"health"`
-	Damage int    `json:"damage"`
-	URI    string
-}
 
 var mutex = &sync.Mutex{}
 var logger *zap.SugaredLogger
 
 func main() {
-	logger = GetLogger()
+	logger = common.GetLogger()
 	logger.Infoln("starting referee")
 
 	r := gin.Default()
@@ -41,7 +36,7 @@ func main() {
 
 func saveCowboys(c *gin.Context) {
 	logger.Debugln("[Referee]: entered POST /cowboy endoint")
-	var cowboys []Cowboy
+	var cowboys []common.Cowboy
 
 	if c.ShouldBind(&cowboys) == nil {
 		logger.Debugln("[Referee]: registered cowboys: ")
@@ -70,7 +65,6 @@ func saveCowboys(c *gin.Context) {
 }
 
 func deleteCowboy(c *gin.Context) {
-	logger := GetLogger()
 	logger.Debugln("[Referee]: entered DELETE /cowboy endoint")
 
 	name := c.Param("name")
@@ -97,7 +91,7 @@ func deleteCowboy(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-func remove(s []Cowboy, i int) []Cowboy {
+func remove(s []common.Cowboy, i int) []common.Cowboy {
 	s[i] = s[len(s)-1]
 	return s[:len(s)-1]
 }
@@ -114,7 +108,7 @@ func updateCowboy(c *gin.Context) {
 
 	for i, cowboy := range cowboys {
 		if cowboy.Name == name {
-			var updatedCowboy Cowboy
+			var updatedCowboy common.Cowboy
 
 			if c.ShouldBind(&updatedCowboy) == nil {
 				cowboys[i].Health = updatedCowboy.Health
@@ -134,7 +128,6 @@ func updateCowboy(c *gin.Context) {
 }
 
 func getCowboys(c *gin.Context) {
-	logger := GetLogger()
 	logger.Debugln("[Referee]: entered GET /cowboy endoint")
 
 	cowboys, err := ReadCowboys()
@@ -174,26 +167,11 @@ func startShooting(c *gin.Context) {
 	c.String(http.StatusCreated, "shooting started")
 }
 
-func spawnCowboy(cowboy Cowboy) {
+func spawnCowboy(cowboy common.Cowboy) {
 
 }
 
-func GetLogger() *zap.SugaredLogger {
-	loglevel := os.Getenv("LOG_LEVEL")
-
-	var l *zap.Logger
-
-	if loglevel == "prod" {
-		l, _ = zap.NewProduction()
-	} else {
-		l = zap.NewExample()
-	}
-
-	defer l.Sync()
-	return l.Sugar()
-}
-
-func WriteCowboys(cowboys []Cowboy) error {
+func WriteCowboys(cowboys []common.Cowboy) error {
 	mutex.Lock()
 	defer mutex.Unlock()
 
@@ -206,7 +184,7 @@ func WriteCowboys(cowboys []Cowboy) error {
 	return ioutil.WriteFile("./cowboy-db", content, 0644)
 }
 
-func ReadCowboys() ([]Cowboy, error) {
+func ReadCowboys() ([]common.Cowboy, error) {
 	mutex.Lock()
 	defer mutex.Unlock()
 
@@ -216,7 +194,7 @@ func ReadCowboys() ([]Cowboy, error) {
 		return nil, err
 	}
 
-	var cowboys []Cowboy
+	var cowboys []common.Cowboy
 	err = json.Unmarshal(raw, &cowboys)
 
 	if nil != err {

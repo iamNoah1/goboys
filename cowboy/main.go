@@ -2,10 +2,9 @@ package main
 
 import (
 	"bytes"
+	"common"
 	"encoding/json"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os"
@@ -17,20 +16,13 @@ import (
 	"go.uber.org/zap"
 )
 
-type Cowboy struct {
-	Name   string `json:"name"`
-	Health int    `json:"health"`
-	Damage int    `json:"damage"`
-	URI    string `json:"URI"`
-}
-
-var me Cowboy // todo check if this really needs to be upper
+var me common.Cowboy // todo check if this really needs to be upper
 var logger *zap.SugaredLogger
 
 var orchestratorURI string
 
 func main() {
-	logger = GetLogger()
+	logger = common.GetLogger()
 
 	validateReadyness()
 
@@ -67,7 +59,7 @@ func spawn() {
 		panic(err)
 	}
 
-	me = Cowboy{
+	me = common.Cowboy{
 		Name:   name,
 		Health: health,
 		Damage: damage,
@@ -85,7 +77,7 @@ func startBattle() {
 
 		query := make(map[string]string)
 		query["damage"] = strconv.Itoa(me.Damage)
-		_, err := makeHttpRequest(http.MethodPost, target.URI+"/shot", nil, query, nil)
+		_, err := common.MakeHttpRequest(http.MethodPost, target.URI+"/shot", nil, query, nil)
 
 		//We don't consider the cowboy not being reachable anymore as an error, because then he is just dead
 		if err != nil && !strings.Contains(err.Error(), "EOF") && !strings.Contains(err.Error(), "connection refused") {
@@ -97,14 +89,14 @@ func startBattle() {
 	}
 }
 
-func getTarget() Cowboy {
-	body, err := makeHttpRequest(http.MethodGet, orchestratorURI+"/cowboy", nil, nil, nil)
+func getTarget() common.Cowboy {
+	body, err := common.MakeHttpRequest(http.MethodGet, orchestratorURI+"/cowboy", nil, nil, nil)
 	if err != nil {
 		//TODO aussteigen?
 		logger.Errorln(err)
 	}
 
-	var cowboys []Cowboy
+	var cowboys []common.Cowboy
 	json.Unmarshal([]byte(body), &cowboys)
 
 	cowboys = removeMySelf(cowboys, me)
@@ -117,7 +109,7 @@ func getTarget() Cowboy {
 	return cowboys[randomIndex]
 }
 
-func removeMySelf(cowboys []Cowboy, me Cowboy) []Cowboy {
+func removeMySelf(cowboys []common.Cowboy, me common.Cowboy) []common.Cowboy {
 	for i, c := range cowboys {
 		if c.Name == me.Name {
 			cowboys[i] = cowboys[len(cowboys)-1]
@@ -142,7 +134,7 @@ func takeShot(c *gin.Context) {
 
 	me.Health = me.Health - damage
 	if me.Health <= 0 {
-		_, err := makeHttpRequest(http.MethodDelete, orchestratorURI+"/cowboy/"+me.Name, nil, nil, nil)
+		_, err := common.MakeHttpRequest(http.MethodDelete, orchestratorURI+"/cowboy/"+me.Name, nil, nil, nil)
 		if err != nil {
 			logger.Error(err)
 			c.Status(http.StatusInternalServerError)
@@ -158,7 +150,7 @@ func takeShot(c *gin.Context) {
 
 		headers := make(map[string]string)
 		headers["Content-Type"] = "application/json"
-		_, err := makeHttpRequest(http.MethodPut, orchestratorURI+"/cowboy/"+me.Name, bodyReader, nil, headers)
+		_, err := common.MakeHttpRequest(http.MethodPut, orchestratorURI+"/cowboy/"+me.Name, bodyReader, nil, headers)
 		if err != nil {
 			logger.Error(err)
 			c.Status(http.StatusInternalServerError)
@@ -166,67 +158,4 @@ func takeShot(c *gin.Context) {
 	}
 
 	c.Status(http.StatusOK)
-}
-
-func GetLogger() *zap.SugaredLogger {
-	loglevel := os.Getenv("LOG_LEVEL")
-
-	var l *zap.Logger
-
-	if loglevel == "prod" {
-		l, _ = zap.NewProduction()
-	} else {
-		l = zap.NewExample()
-	}
-
-	defer l.Sync()
-	return l.Sugar()
-}
-
-func makeHttpRequest(method string, url string, body io.Reader, queryParams map[string]string, headers map[string]string) ([]byte, error) {
-	logger.Debugf("Going to call '%s' with '%s' method", url, method)
-
-	req, err := http.NewRequest(method, url, body)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(queryParams) > 0 {
-		logger.Debug("Going to add query params")
-		q := req.URL.Query()
-
-		for key, param := range queryParams {
-			q.Add(key, param)
-		}
-
-		req.URL.RawQuery = q.Encode()
-	}
-
-	if len(headers) > 0 {
-		logger.Debug("Going to add headers")
-
-		for key, value := range headers {
-			req.Header.Set(key, value)
-		}
-	}
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	defer resp.Body.Close()
-
-	if resp.StatusCode > 300 {
-		return nil, err
-		//TODO vielleicht noch die message returnen
-	}
-
-	responseBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	return responseBody, nil
 }
