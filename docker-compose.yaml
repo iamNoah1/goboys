@@ -1,0 +1,27 @@
+version: '3'
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+
+  referee:
+    build:
+      dockerfile: referee/Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      - rabbitmq
+      - db
+    environment:
+      - DB_HOST=db
+      - RABBIT_HOST=rabbitmq
+      
+  db:
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: mysecretpassword
+    ports:
+      - "5432:5432"
