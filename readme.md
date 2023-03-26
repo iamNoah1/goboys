@@ -21,36 +21,8 @@ Homework for application process at Cast AI
 
 ## Thinking Process
 
-### First approach
-* We need some kind of orchestrator that
-    * takes the Input and starts the battle
-    * stores the list of cowboys (first in a file for simplicity)
-    * keeps track of the health state of the cowboys
-    * notices when the battle is over
-* We need instances of a cowboy that 
-    * can shoot, which includes randomly choosing an enemy
-    * can be shot, meaning substracting health and informing the orchestrator
-    * sleeps inbetween shots
-* Review before coding
-    * How are cowboys represented? Process that run in parallel? That would be the simplest approach
-    * How can they find each other?
-        * Cowboys need to be single applications as they need to have APIs 
-        * Orchestrator knows the health state, let's ask him
-    * Orchestrator is actually the wrong name, it is more a referee
-    * Not the referee should recognize when the battle is over, but the last standing cowboy
-* Insights While Coding 
-    * While http and file store might be the simplest approach, I was thinking of maybe when we use messaging, we don't to ask the referee who is still there to battle. Instead we can just shoot, and the first cowboy who reads the message, is the one that got shot. I mean it does not reflect how it works in reality, but it solves the problem. One cowboy shoots another one, randomly. 
-* Concept
-    * We have two components, referee and cowboy, where at we have 1 referee and several cowboys
-    * Both reside in different folders 
-    * The referee takes a list of cowboys and spins up several cowboys by running child processes start the cowboy binary
-    * Each cowboy runs on a different port that gets stored together with other properties of the cowboy in a file
-    * Changes on the cowboy code needs to be followed by `go build` in the cowboy directory
-* Solution is on branch `first`
-
-
 ### Second approach
-* We stick with the referee and cowboys separation in separate projects/modules
+* We stick with the referee and cowboys separation in separate projects/modules from the first approach
 * Referee, 
     * Keeps the state of cowboys, but this time we use psql
     * Starts the battle 
@@ -58,11 +30,38 @@ Homework for application process at Cast AI
     * just shoot a message in a message queue, and a random cowboy picks it up. 
     * If a message does not get acknowledged anymore, the sending cowboy knows, that he is the only one left.
     * Health updates including death are sent as message 
-* Review before coding
+### Review before coding
     *  
-* Concept
+### Insights While Coding 
+    * There is always one message in the queue left with this approach, so we just purge the queue right after starting the application. Similar situation with the last cowboy in the database. 
+### Concept
     * We have two components, referee and cowboy, where at we have 1 referee and several cowboys
     * Both reside in different folders 
     * The referee takes a list of cowboys stores them in a psql database, then spins several cowboys by running child processes start the cowboy binary
+    * We use a queue for cowboy to cowboy communication, ie shooting
+    * We use a queue for cowboy to referee communication to update health information
     * Changes on the cowboy code needs to be followed by `go build` in the cowboy directory
 * Solution is on branch `second`
+
+## Run the application
+* Change to `referee` directory
+* Optionally set `GIN_MODE` to `test` in order to not have that many logs of the webserver framework
+* Optionally set `PORT` to change the port, the application runs at
+* Optionally set `LOG_LEVEL` to prod in order to have only logs with level info and above. 
+* `docker run -p 5432:5432 -e POSTGRES_PASSWORD=mysecretpassword -d postgres` to start a database 
+* `docker run -d -p 15672:15672 -p 5672:5672 rabbitmq:management` to run a rabbitmq including [management ui](http://localhost:15672)
+* Optionally set `DB_HOST` if the host is not localhost. If not set, defaults to localhost
+* Optionally set `RABBIT_HOST` if the host is not localhost. If not set, defaults to localhost
+* `go run main.go`
+* **Alternative to the last 5 steps is to use `docker-compose up` :)**
+* use endppoint to save cowboys
+* use endpoint to start battle
+
+## Referee API 
+* POST <host>:<port>/cowboy - saves the cowboys from body json 
+* POST <host>:<port>/startShooting - starts the battle 
+
+## Todo
+* Logging for extracted stuff in common (debug)
+* Having the cowboy as global variable does not feel right. 
+* Don't add cowboy, if there is already a cowboy with that name -> use name as pk?!
