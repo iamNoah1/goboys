@@ -9,7 +9,7 @@ import (
 
 type RabbitMQ struct {
 	conn *amqp.Connection
-	Ch   *amqp.Channel
+	ch   *amqp.Channel
 }
 
 var logger *zap.SugaredLogger
@@ -30,16 +30,15 @@ func NewRabbitMQ(url string) (*RabbitMQ, error) {
 	return &RabbitMQ{conn, ch}, nil
 }
 
-func (r *RabbitMQ) Consume(callback func([]byte) bool) error {
-	// Consume messages from the queue
-	msgs, err := r.Ch.Consume(
-		"cowboy-queue", // queue
-		"",             // consumer
-		false,          // auto-ack
-		false,          // exclusive
-		false,          // no-local
-		false,          // no-wait
-		nil,            // args
+func (r *RabbitMQ) Consume(queueName string, callback func([]byte) bool) error {
+	msgs, err := r.ch.Consume(
+		queueName, // queue
+		"",        // consumer
+		false,     // auto-ack
+		false,     // exclusive
+		false,     // no-local
+		false,     // no-wait
+		nil,       // args
 	)
 	if err != nil {
 		return err
@@ -57,7 +56,7 @@ func (r *RabbitMQ) Consume(callback func([]byte) bool) error {
 }
 
 func (r *RabbitMQ) DeclareQueue(name string) error {
-	_, err := r.Ch.QueueDeclare(
+	_, err := r.ch.QueueDeclare(
 		name,
 		false,
 		false,
@@ -71,7 +70,24 @@ func (r *RabbitMQ) DeclareQueue(name string) error {
 	return nil
 }
 
+func (r *RabbitMQ) PublishJSON(exchange string, queue string, json []byte) error {
+	return r.ch.Publish(
+		exchange, // exchange
+		queue,    // routing key
+		false,    // mandatory
+		false,    // immediate
+		amqp.Publishing{
+			ContentType: "application/json",
+			Body:        json,
+		},
+	)
+}
+
+func (r *RabbitMQ) GetQueueInfo(queue string) (amqp.Queue, error) {
+	return r.ch.QueueInspect(queue)
+}
+
 func (r *RabbitMQ) Close() {
-	r.Ch.Close()
+	r.ch.Close()
 	r.conn.Close()
 }

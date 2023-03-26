@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/streadway/amqp"
 	"go.uber.org/zap"
 )
 
@@ -17,11 +16,6 @@ var me common.Cowboy // todo check if this really needs to be upper
 var logger *zap.SugaredLogger
 
 var rabbitMQ *common.RabbitMQ
-
-type shootingData struct {
-	Source string `json:"source"`
-	Damage int    `json:"damage"`
-}
 
 func main() {
 	logger = common.GetLogger()
@@ -38,19 +32,20 @@ func main() {
 		logger.Fatalf("[%s]: failed to connect to RabbitMQ: %v", me.Name, err)
 	}
 
+	//Does this have to run as routine neccesarily?
 	go participateBattle()
 
 	startFighting()
 
-	//defer rabbitMQ.Close()
+	defer rabbitMQ.Close()
 }
 
 func participateBattle() {
-	rabbitMQ.Consume(processMessage)
+	rabbitMQ.Consume("cowboy-queue", processMessage)
 }
 
 func processMessage(body []byte) bool {
-	var data shootingData
+	var data common.ShootingData
 
 	err := json.Unmarshal(body, &data)
 	if err != nil {
@@ -64,16 +59,37 @@ func processMessage(body []byte) bool {
 	}
 
 	me.Health = me.Health - data.Damage
+
+	//Maybe it is not so clever to make this here, because it has some effect on the success of processing or rescheduling the message.
+	err = sendHealthUpdate()
+	if err != nil {
+		var errMessage = fmt.Sprintf("[%s]: failed to publish health update message: %v", me.Name, err)
+		logger.Error(errMessage)
+		return false
+	}
+
 	if me.Health <= 0 {
-		//send a message to rabbitmq
 		logger.Infof("[%s]: I think, I just died", me.Name)
 		os.Exit(0)
 	} else {
 		logger.Infof("[%s]: got shot with damage of %d from %s. Only %d health left", me.Name, data.Damage, data.Source, me.Health)
-		//health update message
 	}
 
 	return true
+}
+
+func sendHealthUpdate() error {
+	msg := common.HealthData{
+		Name:   me.Name,
+		Health: me.Health,
+	}
+
+	body, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal message body: %v", err)
+	}
+
+	return rabbitMQ.PublishJSON("", "referee-queue", body)
 }
 
 func spawn() {
@@ -109,35 +125,25 @@ func startFighting() {
 
 		body, err := json.Marshal(msg)
 		if err != nil {
+			//TODO kein fatal
 			log.Fatalf("failed to marshal message body: %v", err)
 		}
 
-		err = rabbitMQ.Ch.Publish(
-			"",             // exchange
-			"cowboy-queue", // routing key
-			false,          // mandatory
-			false,          // immediate
-			amqp.Publishing{
-				ContentType: "application/json",
-				Body:        body,
-			},
-		)
+		err = rabbitMQ.PublishJSON("", "cowboy-queue", body)
 
 		if err != nil {
 			log.Fatalf("failed to publish a message: %v", err)
 		}
-		fmt.Println("Message sent:", msg)
+		logger.Infof("[%s]: shooting!!!", me.Name)
 
 		logger.Infof("[%s]: need to reload ...", me.Name)
 		time.Sleep(1 * time.Second)
 
-		// Check if there are no consumers
-		qinfo, err := rabbitMQ.Ch.QueueInspect("cowboy-queue")
+		qinfo, err := rabbitMQ.GetQueueInfo("cowboy-queue")
 		if err != nil {
 			log.Fatalf("failed to inspect the queue: %v", err)
 		}
 
-		logger.Infof("consumers: %d", qinfo.Consumers)
 		if qinfo.Consumers == 1 {
 			logger.Infof("[%s]: no one left, I am the winner", me.Name)
 			os.Exit(0)
