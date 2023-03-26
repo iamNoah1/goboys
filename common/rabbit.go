@@ -87,6 +87,10 @@ func (r *RabbitMQ) GetQueueInfo(queue string) (amqp.Queue, error) {
 	return r.ch.QueueInspect(queue)
 }
 
+func (r *RabbitMQ) PurgeQueue(queue string) (int, error) {
+	return r.ch.QueuePurge(queue, false)
+}
+
 func (r *RabbitMQ) Close() {
 	r.ch.Close()
 	r.conn.Close()

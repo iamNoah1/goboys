@@ -2,6 +2,7 @@ package main
 
 import (
 	"common"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -20,32 +21,99 @@ var db *gorm.DB
 
 var rabbitMQ *common.RabbitMQ
 
+const refereeQueueName = "referee-queue"
+const cowboyQueueName = "cowboy-queue"
+
 func main() {
 	logger = common.GetLogger()
 	logger.Infoln("starting referee")
 
 	r := gin.Default()
 
-	db, err := connectDB()
+	initDB()
+
+	initRabbit()
+
+	r.POST("/cowboy", saveCowboys(db))
+	r.POST("/startShooting", startShooting(db))
+
+	go rabbitMQ.Consume(refereeQueueName, processMessage(db))
+
+	defer rabbitMQ.Close()
+	defer db.Close()
+	r.Run()
+}
+
+func initDB() {
+	var err error
+	db, err = connectDB()
 	if err != nil {
 		logger.Fatalf("[Referee]: failed to connect to db: %v", err)
 	}
-	defer db.Close()
+	err = ClearCowboys(db)
+	if err != nil {
+		logger.Fatalf("[Referee]: could not clear cowboys: %v", err)
+	}
+}
 
+func initRabbit() {
+	var err error
 	rabbitMQ, err = common.NewRabbitMQ("amqp://guest:guest@localhost:5672/")
 	if err != nil {
 		logger.Fatalf("[Referee]: failed to connect to RabbitMQ: %v", err)
 	}
 
-	err = rabbitMQ.DeclareQueue("cowboy-queue")
+	err = rabbitMQ.DeclareQueue(cowboyQueueName)
 	if err != nil {
 		logger.Fatalf("[Referee]: failed to declare the queue for cowboy communication: %v", err)
 	}
+	_, err = rabbitMQ.PurgeQueue(cowboyQueueName)
+	if err != nil {
+		logger.Fatalf("[Referee]: failed to purge queue for cowboy communication: %v", err)
+	}
 
-	r.POST("/cowboy", saveCowboys(db))
-	r.POST("/startShooting", startShooting(db))
+	err = rabbitMQ.DeclareQueue(refereeQueueName)
+	if err != nil {
+		logger.Fatalf("[Referee]: failed to declare the queue for referee communication: %v", err)
+	}
+	_, err = rabbitMQ.PurgeQueue(refereeQueueName)
+	if err != nil {
+		logger.Fatalf("[Referee]: failed to declare the queue for referee communication: %v", err)
+	}
+}
 
-	r.Run()
+func processMessage(db *gorm.DB) func(body []byte) bool {
+	return func(body []byte) bool {
+		var data common.HealthData
+
+		err := json.Unmarshal(body, &data)
+		if err != nil {
+			var errMessage = fmt.Sprintf("[Referee]: Error while updating cowboy. Error: %s", err.Error())
+			logger.Error(errMessage)
+			return false
+		}
+
+		c := Cowboy{
+			Name:   data.Name,
+			Health: data.Health,
+		}
+
+		if c.Health <= 0 {
+			if err := c.Delete(db); err != nil {
+				var errMessage = fmt.Sprintf("[Referee]: could not delete cowboy. Error: %s", err.Error())
+				logger.Error(errMessage)
+				return false
+			}
+		} else {
+			if err := c.Update(db); err != nil {
+				var errMessage = fmt.Sprintf("[Referee]: could not update cowboy. Error: %s", err.Error())
+				logger.Error(errMessage)
+				return false
+			}
+		}
+
+		return true
+	}
 }
 
 func saveCowboys(db *gorm.DB) func(c *gin.Context) {

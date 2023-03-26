@@ -17,6 +17,9 @@ var logger *zap.SugaredLogger
 
 var rabbitMQ *common.RabbitMQ
 
+const cowboyQueueName = "cowboy-queue"
+const refereeQueueName = "referee-queue"
+
 func main() {
 	logger = common.GetLogger()
 
@@ -41,7 +44,7 @@ func main() {
 }
 
 func participateBattle() {
-	rabbitMQ.Consume("cowboy-queue", processMessage)
+	rabbitMQ.Consume(cowboyQueueName, processMessage)
 }
 
 func processMessage(body []byte) bool {
@@ -89,7 +92,7 @@ func sendHealthUpdate() error {
 		return fmt.Errorf("failed to marshal message body: %v", err)
 	}
 
-	return rabbitMQ.PublishJSON("", "referee-queue", body)
+	return rabbitMQ.PublishJSON("", refereeQueueName, body)
 }
 
 func spawn() {
@@ -129,7 +132,7 @@ func startFighting() {
 			log.Fatalf("failed to marshal message body: %v", err)
 		}
 
-		err = rabbitMQ.PublishJSON("", "cowboy-queue", body)
+		err = rabbitMQ.PublishJSON("", cowboyQueueName, body)
 
 		if err != nil {
 			log.Fatalf("failed to publish a message: %v", err)
@@ -139,7 +142,7 @@ func startFighting() {
 		logger.Infof("[%s]: need to reload ...", me.Name)
 		time.Sleep(1 * time.Second)
 
-		qinfo, err := rabbitMQ.GetQueueInfo("cowboy-queue")
+		qinfo, err := rabbitMQ.GetQueueInfo(cowboyQueueName)
 		if err != nil {
 			log.Fatalf("failed to inspect the queue: %v", err)
 		}
