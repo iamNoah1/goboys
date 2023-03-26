@@ -29,11 +29,18 @@ func main() {
 
 	spawn()
 
+	rabbitHost := os.Getenv("RABBIT_HOST")
+	if os.Getenv("RABBIT_HOST") == "" {
+		rabbitHost = "localhost"
+	}
+	rabbitConnectionString := fmt.Sprintf("amqp://guest:guest@%s:5672/", rabbitHost)
+
 	var err error
-	rabbitMQ, err = common.NewRabbitMQ("amqp://guest:guest@localhost:5672/")
+	rabbitMQ, err = common.NewRabbitMQ(rabbitConnectionString)
 	if err != nil {
 		logger.Fatalf("[%s]: failed to connect to RabbitMQ: %v", me.Name, err)
 	}
+	logger.Infof("[%s]: connected to rabbitmq", me.Name)
 
 	//Does this have to run as routine neccesarily?
 	go participateBattle()

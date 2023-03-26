@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
@@ -26,13 +27,18 @@ const cowboyQueueName = "cowboy-queue"
 
 func main() {
 	logger = common.GetLogger()
-	logger.Infoln("starting referee")
+	logger.Infoln("[Referee]: starting sequence ...")
 
 	r := gin.Default()
 
 	initDB()
+	logger.Infoln("[Referee]: connected to db")
+
+	//Little hack for when running in docker compose, because apparently rabbitmq needs some time until it is available to connect.
+	time.Sleep(10 * time.Second)
 
 	initRabbit()
+	logger.Infoln("[Referee]: connected to and initialized rabbitmq")
 
 	r.POST("/cowboy", saveCowboys(db))
 	r.POST("/startShooting", startShooting(db))
@@ -57,8 +63,16 @@ func initDB() {
 }
 
 func initRabbit() {
+	rabbitHost := os.Getenv("RABBIT_HOST")
+	if os.Getenv("RABBIT_HOST") == "" {
+		rabbitHost = "localhost"
+	}
+
+	rabbitConnectionString := fmt.Sprintf("amqp://guest:guest@%s:5672/", rabbitHost)
+	logger.Debugln(rabbitConnectionString)
+
 	var err error
-	rabbitMQ, err = common.NewRabbitMQ("amqp://guest:guest@localhost:5672/")
+	rabbitMQ, err = common.NewRabbitMQ(rabbitConnectionString)
 	if err != nil {
 		logger.Fatalf("[Referee]: failed to connect to RabbitMQ: %v", err)
 	}
@@ -173,7 +187,33 @@ func spawnCowboy(cowboy Cowboy) {
 }
 
 func connectDB() (*gorm.DB, error) {
-	dbURI := "host=localhost port=5432 user=postgres password=mysecretpassword sslmode=disable"
+	dbHost := os.Getenv("DB_HOST")
+	if dbHost == "" {
+		dbHost = "localhost"
+	}
+
+	dbPort := os.Getenv("DB_PORT")
+	if dbPort == "" {
+		dbPort = "5432"
+	}
+
+	dbUser := os.Getenv("DB_USER")
+	if dbUser == "" {
+		dbUser = "postgres"
+	}
+
+	dbPassword := os.Getenv("DB_PASSWORD")
+	if dbPassword == "" {
+		dbPassword = "mysecretpassword"
+	}
+
+	dbSSLMode := os.Getenv("DB_SSLMODE")
+	if dbSSLMode == "" {
+		dbSSLMode = "disable"
+	}
+
+	dbURI := fmt.Sprintf("host=%s port=%s user=%s password=%s sslmode=%s", dbHost, dbPort, dbUser, dbPassword, dbSSLMode)
+
 	db, err := gorm.Open("postgres", dbURI)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect database: %w", err)
