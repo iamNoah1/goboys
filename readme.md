@@ -57,7 +57,8 @@ Homework for application process at Cast AI
 * Maybe we can simplify stuff here using for example goroutines, but somehow that feels wrong. It would be a vertical scaling vs a horizontal scaling which feels more natural somehow. 
 
 
-### Run the application
+## Run the application
+* Change to `referee` directory
 * Optionally set `GIN_MODE` to `test` in order to not have that many logs of the webserver framework
 * Optionally set `PORT` to change the port, the application runs at
 * Optionally set `LOG_LEVEL` to `prod` which only shows info and above 
@@ -65,7 +66,7 @@ Homework for application process at Cast AI
 * use endppoint to save cowboys
 * use endpoint to start battle
 
-### Referee API 
+## Referee API 
 * POST <host>:<port>/cowboy - saves the cowboys from body json 
 * GET <host>:<port>/cowboy - gets list of cowboys with their properties
 * DELETE <host>:<port>/cowboy/<name> - deletes a cowboy
